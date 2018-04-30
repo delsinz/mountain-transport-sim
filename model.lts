@@ -1,0 +1,80 @@
+const Bottom = 0
+const Top = 1
+const Unoccupied = 0
+const Occupied = 1
+const OffTour = 0
+const OnTour = 1
+const N = 2 // Number of villages.
+
+// Producer only has one action, arrive
+PRODUCER = (arrive -> PRODUCER).
+
+// Consumer has one action, depart
+CONSUMER = (depart -> CONSUMER).
+
+// Keeps operating cable car
+OPERATOR = (operate -> OPERATOR).
+
+// State of CableCar consists of four parameters.
+// at: its current location
+// headto: its intended destination
+// occupy: whether it's occupied
+// tour: Whether the group on cable car is on tour. 
+// 	     Empty cable car default to off tour.
+CABLECAR = CC[Bottom][Top][Unoccupied][OffTour],
+CC[at:0..1][headto:0..1][occupy:0..1][tour:0..1] = (
+	// If cable car is at bottom and unoccupied, then new group can arrive
+	when(at == Bottom && occupy == Unoccupied) arrive ->
+		CC[Bottom][Top][Occupied][OnTour] |
+	// If cable car is at bottom and occupied, then group can depart
+	when(at == Bottom && occupy == Occupied && tour == OffTour) depart ->
+		CC[Bottom][Top][Unoccupied][OffTour] |
+	// If cable car is empty, operator can send it to the other side
+	when(occupy == Unoccupied) operate ->
+		if at == Bottom then
+			CC[Top][Top][Unoccupied][OffTour]
+		else
+			CC[Bottom][Bottom][Unoccupied][OffTour] |
+	// If cable car is at intended destination, wait for group to leave.
+	// Otherwise get moving.
+	when(occupy == Occupied && at != headto) operate ->
+		if at == Bottom then
+			CC[Top][Top][Occupied][OnTour]
+		else
+			CC[Bottom][Bottom][Occupied][OnTour] |
+	// If cable car at top and empty, group can enter to go down
+	when(at == Top && occupy == Unoccupied) enter_car ->
+		CC[Top][Bottom][Occupied][OffTour] |
+	// If cable car at top and occupied and group is on tour, group can
+	// leave for village0
+	when(at == Top && occupy == Occupied && tour == OnTour) leave_car ->
+		CC[Top][Bottom][Unoccupied][OffTour]
+).
+
+// State of village consists of two parameters
+// occupy: whether it's occupied by a group
+// tour: Whether the group in village is on tour. Empty village is default to
+// off tour. This OnTour/OffTour check is there to prevent groups that have f
+// inished the tour from leaving cable car for village0.
+VILLAGE = V[Unoccupied][OffTour],
+V[occupy:0..1][tour:0..1] = (
+	when(occupy == Unoccupied) enter_village -> V[Occupied][OnTour] |
+	when(occupy == Occupied && tour == OnTour) leave_village ->
+		V[Unoccupied][OffTour]
+).
+
+// Train between only villages
+TRAIN(I=0) = (v[I].leave_village -> v[I+1].enter_village ->
+	v[I+1].leave_village -> v[I].enter_village -> TRAIN).
+
+// Train between cable car and the first village
+TRAIN_FIRST = (leave_car -> v[0].enter_village -> v[0].leave_village ->
+	enter_car -> TRAIN_FIRST).
+
+// Train between the last village and cable car
+TRAIN_LAST = (v[N-1].leave_village -> enter_car -> leave_car ->
+	v[N-1].enter_village -> TRAIN_LAST).
+
+// Main simulation process
+||SIM = (PRODUCER || CONSUMER || CABLECAR || v[i:0..N - 1]:VILLAGE ||
+	forall[i:0..N-2] TRAIN(i)|| TRAIN_FIRST || TRAIN_LAST).
